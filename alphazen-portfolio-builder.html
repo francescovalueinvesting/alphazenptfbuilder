@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlphaZen · Portfolio Builder</title>
+  <meta name="description" content="Build your concentrated value investing portfolio from scratch. Interactive simulator by AlphaZen." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { background: #141108; color: #f5f0e1; font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+    input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; width: 100%; cursor: pointer; height: 22px; margin-top: -6px; position: relative; z-index: 2; }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: #c8b873; border: 2px solid #f5f0e1; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #c8b873; border: 2px solid #f5f0e1; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4); border: none;
+    }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-1 { animation: fadeUp 0.6s ease both; }
+    .fade-2 { animation: fadeUp 0.6s ease 0.1s both; }
+    .fade-3 { animation: fadeUp 0.6s ease 0.15s both; }
+    .fade-4 { animation: fadeUp 0.6s ease 0.2s both; }
+    .fade-5 { animation: fadeUp 0.6s ease 0.25s both; }
+    .fade-6 { animation: fadeUp 0.6s ease 0.3s both; }
+    .fade-7 { animation: fadeUp 0.6s ease 0.35s both; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script>
+    const { useState, useEffect, useRef, createElement: h } = React;
+
+    // ── AnimatedNumber ──
+    function AnimatedNumber({ value, prefix = "€", duration = 500 }) {
+      const [display, setDisplay] = useState(value);
+      const prev = useRef(value);
+      const raf = useRef(null);
+      useEffect(() => {
+        const start = prev.current, end = value, t0 = performance.now();
+        const run = (now) => {
+          const p = Math.min((now - t0) / duration, 1);
+          setDisplay(Math.round(start + (end - start) * (1 - Math.pow(1 - p, 3))));
+          if (p < 1) raf.current = requestAnimationFrame(run);
+        };
+        raf.current = requestAnimationFrame(run);
+        prev.current = value;
+        return () => cancelAnimationFrame(raf.current);
+      }, [value]);
+      return h("span", null, prefix + display.toLocaleString());
+    }
+
+    // ── Slider ──
+    function Slider({ label, value, onChange, min, max, step = 1, format, note }) {
+      const pct = ((value - min) / (max - min)) * 100;
+      return h("div", { style: { marginBottom: 26 } },
+        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 } },
+          h("span", { style: { fontSize: 13, color: "#b0a880", letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 500 } }, label),
+          h("span", { style: { fontFamily: "'Playfair Display', serif", fontSize: 22, color: "#f5f0e1", fontWeight: 600 } }, format ? format(value) : value)
+        ),
+        note && h("div", { style: { fontSize: 11, color: "#5c5639", marginBottom: 8, lineHeight: 1.4 } }, note),
+        h("div", { style: { position: "relative", height: 6, borderRadius: 3, background: "#2a2618" } },
+          h("div", { style: { position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 3, width: pct + "%", background: "linear-gradient(90deg, #887c43, #c8b873)", transition: "width 0.15s ease" } })
+        ),
+        h("input", { type: "range", min, max, step, value, onChange: (e) => onChange(Number(e.target.value)) })
+      );
+    }
+
+    // ── StatCard ──
+    function StatCard({ label, value, sub, accent }) {
+      return h("div", { style: {
+        background: accent ? "linear-gradient(135deg, #2a2618, #33301f)" : "#1e1b12",
+        border: "1px solid " + (accent ? "#3d3620" : "#2a2618"),
+        borderRadius: 12, padding: "16px 14px", textAlign: "center"
+      } },
+        h("div", { style: { fontSize: 10, color: accent ? "#c8b873" : "#8a7f60", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 6 } }, label),
+        h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: accent ? 26 : 20, color: accent ? "#c8b873" : "#f5f0e1", fontWeight: 600 } },
+          h(AnimatedNumber, { value: Math.round(value) })
+        ),
+        sub && h("div", { style: { fontSize: 11, color: "#5c5639", marginTop: 4 } }, sub)
+      );
+    }
+
+    // ── FlowStep ──
+    function FlowStep({ step, label, value, isLast }) {
+      return h("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+        h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center" } },
+          h("div", { style: {
+            width: 28, height: 28, borderRadius: 8,
+            background: "linear-gradient(135deg, #c8b873, #887c43)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 12, fontWeight: 700, color: "#1a1710"
+          } }, step),
+          !isLast && h("div", { style: { width: 1, height: 20, background: "#2a2618" } })
+        ),
+        h("div", { style: { flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: isLast ? 0 : 12 } },
+          h("span", { style: { fontSize: 13, color: "#b0a880" } }, label),
+          h("span", { style: { fontFamily: "'Playfair Display', serif", fontSize: 17, color: "#f5f0e1", fontWeight: 600 } }, "€" + Math.round(value).toLocaleString())
+        )
+      );
+    }
+
+    // ── PositionCard ──
+    function PositionCard({ index, fullPositionSize, entrySize, tranches, isFirstRound }) {
+      const [expanded, setExpanded] = useState(false);
+      const colors = ["#c8b873", "#a89a5b", "#887c43", "#6b6030"];
+      const labels = ["First entry — deploy now", "If stock drops 15-20%, or after 30-60 days", "If stock drops 30%+, or reallocate", "Final tranche — deep conviction only"];
+
+      return h("div", {
+        onClick: () => setExpanded(!expanded),
+        style: {
+          background: isFirstRound ? "linear-gradient(135deg, #1e1b12, #2a2618)" : "#1a1710",
+          border: "1px solid " + (isFirstRound ? "#3d3620" : "#252015"),
+          borderRadius: 12, padding: "14px 16px", cursor: "pointer", transition: "all 0.2s ease"
+        }
+      },
+        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+            h("div", { style: {
+              width: 30, height: 30, borderRadius: 8,
+              background: isFirstRound ? "linear-gradient(135deg, #c8b873, #887c43)" : "#2a2618",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 700, color: isFirstRound ? "#1a1710" : "#6b6545"
+            } }, index + 1),
+            h("div", null,
+              h("div", { style: { fontSize: 13, fontWeight: 600, color: "#f5f0e1" } }, "Position #" + (index + 1)),
+              h("div", { style: { fontSize: 11, color: "#5c5639" } },
+                isFirstRound ? "Buy now · €" + entrySize.toLocaleString() + " first entry" : "Add within 12 months")
+            )
+          ),
+          h("div", { style: { textAlign: "right" } },
+            h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: 17, color: isFirstRound ? "#c8b873" : "#8a7f60", fontWeight: 600 } }, "€" + fullPositionSize.toLocaleString()),
+            h("div", { style: { fontSize: 9, color: "#4a4430" } }, expanded ? "▲ close" : "▼ tranches")
+          )
+        ),
+        expanded && h("div", { style: { marginTop: 14, paddingTop: 14, borderTop: "1px solid #2a2618" } },
+          h("div", { style: { display: "flex", gap: 3, marginBottom: 14, height: 6, borderRadius: 3, overflow: "hidden" } },
+            Array.from({ length: tranches }).map((_, i) =>
+              h("div", { key: i, style: { flex: 1, background: colors[i], borderRadius: 3 } })
+            )
+          ),
+          Array.from({ length: tranches }).map((_, i) =>
+            h("div", { key: i, style: {
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "8px 0", borderBottom: i < tranches - 1 ? "1px solid #1e1b12" : "none"
+            } },
+              h("div", { style: { display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 } },
+                h("span", { style: { fontSize: 10, fontWeight: 700, color: colors[i], background: colors[i] + "20", padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap" } }, "T" + (i + 1)),
+                h("span", { style: { fontSize: 11, color: "#8a7f60", overflow: "hidden", textOverflow: "ellipsis" } }, labels[i])
+              ),
+              h("span", { style: { fontFamily: "'Playfair Display', serif", fontSize: 14, color: "#f5f0e1", fontWeight: 600, marginLeft: 8, whiteSpace: "nowrap" } }, "€" + entrySize.toLocaleString())
+            )
+          )
+        )
+      );
+    }
+
+    // ── WhatIfPanel ──
+    function WhatIfPanel({ entrySize, tranches }) {
+      const [dd, setDd] = useState(20);
+      const avg = (entrySize + entrySize * (1 - dd / 100)) / (2 * entrySize);
+      const eff = ((1 - avg) * 100).toFixed(1);
+
+      return h("div", { style: { background: "linear-gradient(135deg, #1a1208, #1e1b12)", border: "1px solid #3d3620", borderRadius: 16, padding: 24, marginTop: 16 } },
+        h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: 18, color: "#f5f0e1", fontWeight: 600, marginBottom: 4 } }, "What If? 🧪"),
+        h("div", { style: { fontSize: 12, color: "#5c5639", marginBottom: 20 } }, "A stock drops right after your first entry"),
+        h(Slider, { label: "Stock drops by", value: dd, onChange: setDd, min: 5, max: 50, step: 5, format: (v) => "−" + v + "%" }),
+        h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
+          h("div", { style: { background: "#2a2618", borderRadius: 12, padding: 16, textAlign: "center" } },
+            h("div", { style: { fontSize: 10, color: "#5c5639", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, marginBottom: 4 } }, "All-in (no tranches)"),
+            h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: 24, color: "#ef4444", fontWeight: 600 } }, "−" + dd + "%"),
+            h("div", { style: { fontSize: 11, color: "#5c5639", marginTop: 4 } }, "full exposure to the drop")
+          ),
+          h("div", { style: { background: "linear-gradient(135deg, #2a2618, #33301f)", borderRadius: 12, padding: 16, textAlign: "center", border: "1px solid #3d3620" } },
+            h("div", { style: { fontSize: 10, color: "#5c5639", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, marginBottom: 4 } }, "With T1 + T2"),
+            h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: 24, color: "#c8b873", fontWeight: 600 } }, "−" + eff + "%"),
+            h("div", { style: { fontSize: 11, color: "#5c5639", marginTop: 4 } }, "avg cost improved")
+          )
+        ),
+        h("div", { style: { marginTop: 14, padding: "12px 16px", borderRadius: 10, background: "#16a34a12", border: "1px solid #16a34a25", fontSize: 12, color: "#22c55e", lineHeight: 1.6 } },
+          "💡 If the stock drops " + dd + "% and you deploy Tranche 2, your average cost is only −" + eff + "% instead of −" + dd + "%. Tranches turn panic into opportunity."
+        )
+      );
+    }
+
+    // ── Main App ──
+    function App() {
+      const [budget, setBudget] = useState(40000);
+      const [idealCompanies, setIdealCompanies] = useState(10);
+      const [initialPct, setInitialPct] = useState(50);
+      const [firstRound, setFirstRound] = useState(5);
+      const [tranches, setTranches] = useState(2);
+      const [showWhatIf, setShowWhatIf] = useState(false);
+
+      const CASH_BUFFER = 0.20;
+      const investableSum = budget * (1 - CASH_BUFFER);
+      const fullPositionSize = Math.round(investableSum / idealCompanies);
+      const initialInvestments = Math.round(investableSum * (initialPct / 100));
+      const firstEntrySize = Math.round(fullPositionSize / tranches);
+      const moneyToDeployNow = firstEntrySize * firstRound;
+      const cashHeld = budget * CASH_BUFFER;
+      const reserveAfterDeploy = investableSum - moneyToDeployNow;
+
+      const deployPct = (moneyToDeployNow / budget) * 100;
+      const reservePct = Math.max(0, (reserveAfterDeploy / budget) * 100);
+      const cashPct = (cashHeld / budget) * 100;
+
+      const maxFirstRoundByBudget = Math.floor(initialInvestments / fullPositionSize);
+      const maxFirstRound = Math.min(Math.max(maxFirstRoundByBudget, 5), Math.min(idealCompanies, 12));
+
+      useEffect(() => {
+        if (firstRound > maxFirstRound) setFirstRound(maxFirstRound);
+      }, [initialPct, idealCompanies, maxFirstRound]);
+
+      return h("div", { style: { maxWidth: 520, margin: "0 auto", padding: "40px 20px 60px" } },
+
+        // Header
+        h("div", { className: "fade-1", style: { textAlign: "center", marginBottom: 40 } },
+          h("div", { style: { fontSize: 11, fontWeight: 600, color: "#c8b873", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 } }, "AlphaZen"),
+          h("h1", { style: { fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 700, color: "#f5f0e1", margin: 0, lineHeight: 1.2 } }, "Portfolio Builder"),
+          h("p", { style: { fontSize: 13, color: "#5c5639", marginTop: 8, lineHeight: 1.5 } },
+            "Build your concentrated value portfolio from scratch.", h("br"), "Adjust the sliders — your deployment plan updates instantly.")
+        ),
+
+        // Inputs
+        h("div", { className: "fade-2", style: { background: "#1e1b12", border: "1px solid #2a2618", borderRadius: 16, padding: 28, marginBottom: 24 } },
+          h(Slider, { label: "Budget", value: budget, onChange: setBudget, min: 5000, max: 200000, step: 1000, format: (v) => "€" + v.toLocaleString(), note: "Your total available capital" }),
+          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 10, background: "#1a1710", marginBottom: 26, border: "1px solid #252015" } },
+            h("span", { style: { fontSize: 13, color: "#8a7f60" } }, "Cash Buffer (fixed)"),
+            h("span", { style: { fontFamily: "'Playfair Display', serif", fontSize: 18, color: "#f5f0e1", fontWeight: 600 } }, "20%")
+          ),
+          h(Slider, { label: "Ideal N° of Companies", value: idealCompanies, onChange: (v) => { setIdealCompanies(v); if (firstRound > Math.min(v, 12)) setFirstRound(Math.min(v, 12)); }, min: 7, max: 15, note: "Steady-state portfolio size within 1 year" }),
+          h(Slider, { label: "Initial Investment", value: initialPct, onChange: setInitialPct, min: 50, max: 100, step: 5, format: (v) => v + "%", note: "€" + initialInvestments.toLocaleString() + " allocated — from 50% to 100% depending on market conditions" }),
+          h(Slider, { label: "First Round Companies", value: Math.min(firstRound, maxFirstRound), onChange: setFirstRound, min: 5, max: maxFirstRound, note: "Stocks to buy now (max " + maxFirstRound + " at " + initialPct + "% initial investment)" }),
+          h(Slider, { label: "N° of Tranches", value: tranches, onChange: setTranches, min: 2, max: 4, note: "How many entries per position (min 2, max 4)" })
+        ),
+
+        // Flow
+        h("div", { className: "fade-3", style: { background: "#1e1b12", border: "1px solid #2a2618", borderRadius: 16, padding: 24, marginBottom: 24 } },
+          h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: 16, color: "#f5f0e1", fontWeight: 600, marginBottom: 16 } }, "How it breaks down"),
+          h(FlowStep, { step: "1", label: "Investable Sum", value: investableSum }),
+          h(FlowStep, { step: "2", label: "Full Position Size (÷ " + idealCompanies + ")", value: fullPositionSize }),
+          h(FlowStep, { step: "3", label: "Initial Investments (" + initialPct + "%)", value: initialInvestments }),
+          h(FlowStep, { step: "4", label: "First Entry Size (÷ " + tranches + " tranches)", value: firstEntrySize }),
+          h(FlowStep, { step: "5", label: "Deploy Now (× " + firstRound + " stocks)", value: moneyToDeployNow, isLast: true })
+        ),
+
+        // Stats
+        h("div", { className: "fade-4", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 } },
+          h(StatCard, { label: "Deploy Now", value: moneyToDeployNow, accent: true }),
+          h(StatCard, { label: "First Entry / Stock", value: firstEntrySize, accent: true }),
+          h(StatCard, { label: "Full Position Size", value: fullPositionSize, sub: "steady-state target" }),
+          h(StatCard, { label: "Cash Buffer", value: cashHeld, sub: "untouched safety net" })
+        ),
+
+        // Bar
+        h("div", { className: "fade-5", style: { marginBottom: 28 } },
+          h("div", { style: { display: "flex", height: 12, borderRadius: 6, overflow: "hidden", background: "#1a1710", border: "1px solid #2a2618" } },
+            h("div", { style: { width: Math.min(deployPct, 100) + "%", background: "linear-gradient(90deg, #887c43, #c8b873)", transition: "width 0.3s ease" } }),
+            h("div", { style: { width: Math.max(reservePct, 0) + "%", background: "#3d3620", transition: "width 0.3s ease" } }),
+            h("div", { style: { width: cashPct + "%", background: "#252015", transition: "width 0.3s ease" } })
+          ),
+          h("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6 } },
+            h("span", { style: { fontSize: 10, color: "#c8b873", fontWeight: 500 } }, "Deploy " + Math.round(Math.min(deployPct, 100)) + "%"),
+            h("span", { style: { fontSize: 10, color: "#6b6545", fontWeight: 500 } }, "Reserve " + Math.round(Math.max(reservePct, 0)) + "%"),
+            h("span", { style: { fontSize: 10, color: "#4a4430", fontWeight: 500 } }, "Cash " + Math.round(cashPct) + "%")
+          )
+        ),
+
+        // Positions
+        h("div", { className: "fade-6", style: { marginBottom: 24 } },
+          h("div", { style: { fontFamily: "'Playfair Display', serif", fontSize: 18, color: "#f5f0e1", fontWeight: 600, marginBottom: 4 } }, "Your Positions"),
+          h("div", { style: { fontSize: 12, color: "#5c5639", marginBottom: 14 } }, "Tap any position to see the tranche plan"),
+          h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+            Array.from({ length: idealCompanies }).map((_, i) =>
+              h(PositionCard, { key: i, index: i, fullPositionSize, entrySize: firstEntrySize, tranches, isFirstRound: i < firstRound })
+            )
+          )
+        ),
+
+        // What-If
+        h("div", { className: "fade-7" },
+          h("button", {
+            onClick: () => setShowWhatIf(!showWhatIf),
+            style: {
+              width: "100%", padding: "14px 20px", borderRadius: 12,
+              background: showWhatIf ? "#2a2618" : "transparent",
+              border: "1.5px solid #3d3620", cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600,
+              color: "#c8b873", transition: "all 0.2s"
+            }
+          }, showWhatIf ? "Hide What-If Simulator ▲" : "🧪 Open What-If Simulator"),
+          showWhatIf && h(WhatIfPanel, { entrySize: firstEntrySize, tranches })
+        ),
+
+        // Footer
+        h("div", { style: { textAlign: "center", marginTop: 40, paddingTop: 20, borderTop: "1px solid #1e1b12" } },
+          h("div", { style: { fontSize: 11, color: "#3d3620", lineHeight: 1.6 } },
+            "AlphaZen Portfolio Builder Simulator · For educational purposes only", h("br"),
+            "Not financial advice · Past performance is not indicative of future results"
+          )
+        )
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+  </script>
+</body>
+</html>
